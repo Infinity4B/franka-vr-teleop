@@ -3,3 +3,12 @@ __pycache__/
 .venv/
 *.csv
 .DS_Store
+
+# 头显工程：Godot 缓存、Android 构建模板（约 1 GB，导出时自动生成）、下载的插件（tools/fetch_addons.sh）
+vr-app/.godot/
+vr-app/android/
+vr-app/addons/godotopenxrvendors/
+build/
+
+# 发布签名（含密码）。丢了就不能覆盖安装升级，请另外备份；GitHub Actions 用 secrets，见 workflow 文件头
+keystore/

@@ -1,15 +1,13 @@
 # -- coding: UTF-8
 """python -m franka_vr_bridge [--config config.yaml] [--home] [--dry-run] [--csv out.csv] [--host IP] [--port N]
 
-Quest 3S 无线遥操 Franka FR3 的适配器。头显用 arx-vr-analysis 的 ArxTeleop.apk，协议不变。
+Quest 3S 无线遥操 Franka FR3 的适配器。头显用本仓库 vr-app/ 的 Franka Teleop（协议同 arx-vr-analysis，magic 为 FRVR）。
 """
 import argparse
 import os
 import signal
 import sys
 import threading
-
-import numpy as np
 
 from .core import DEFAULT_CONFIG, __version__ as core_version, merge_config
 
@@ -78,6 +76,8 @@ def main(argv=None):
         return
 
     import franky
+    import numpy as np
+
     from .franka import FrankaArm
 
     f = cfg['franka']
@@ -113,8 +113,7 @@ def main(argv=None):
     arm.set_zero_here()
     runner = Runner(cfg, arm.publish, ros_version=2, log=log, csv_path=args.csv)
     runner.start()
-    log(f'控制 {"右" if arm.arm == "right" else "左"}手柄 → FR3。头显：A B X Y 同时按解锁，双摇杆按下开闸，'
-        f'按住扳机跟随，握持键夹爪，A/X 复位到零点。Ctrl+C 退出')
+    log('头显（Franka Teleop，右手柄）：长按 B 1 秒开/关遥操，按住扳机跟随，握持键夹爪，A 回零点。Ctrl+C 退出')
     try:
         arm.run(runner, stop)
     finally:

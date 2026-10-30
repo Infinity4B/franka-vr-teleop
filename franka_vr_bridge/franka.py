@@ -182,7 +182,7 @@ class FrankaArm:
             upper_joint_limits=FR3_UPPER,
             period=1.0 / float(c['loop_rate']),
         ) as tracker:
-            self.log('跟踪器已启动，等待头显解锁并开闸')
+            self.log('跟踪器已启动，等待头显开启遥操（长按 B）')
             while not stop.is_set() and tracker.tick():
                 with self.lock:
                     tgt = self.target

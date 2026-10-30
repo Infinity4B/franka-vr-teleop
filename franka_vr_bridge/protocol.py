@@ -1,12 +1,13 @@
 # -- coding: UTF-8
-"""VR ⇄ 机器人 UDP 协议 v1（小端）。字段说明见 docs/协议.md，VR 端实现在 vr-app/scripts/protocol.gd。
+"""VR ⇄ 机器人 UDP 协议 v1（小端）。字段说明见 arx-vr-analysis 的 teleop/docs/协议.md，VR 端实现在 vr-app/scripts/protocol.gd。
 
-所有包共用 8 字节包头：magic "AXVR"、version、type、2 字节保留。
+所有包共用 8 字节包头：magic "FRVR"、version、type、2 字节保留。
+与 arx-vr-analysis 的唯一区别是 magic（那边是 "AXVR"）：Franka 头显应用只认 Franka 适配器，ARX 的应用也控制不了 FR3。
 发现、控制、状态走同一个 UDP 端口（默认 47800）。
 """
 import struct
 
-MAGIC = b'AXVR'
+MAGIC = b'FRVR'
 VERSION = 1
 DEFAULT_PORT = 47800
 
@@ -23,11 +24,11 @@ CTRL = struct.Struct('<IIQHBB7f7f4f')
 STAT = struct.Struct('<IIQIfHBBfff')
 
 # CTRL.flags
-F_UNLOCKED = 1 << 0      # 手持解锁（A+B+X+Y）
-F_GATE = 1 << 1          # 总闸门（双摇杆按下）
+F_UNLOCKED = 1 << 0      # 解锁（ARX：A+B+X+Y；Franka Teleop：长按 B 开启遥操时和 GATE 一起置位）
+F_GATE = 1 << 1          # 总闸门（ARX：双摇杆按下；Franka Teleop：同上）
 F_LEFT_FOLLOW = 1 << 2   # 左扳机按住
 F_RIGHT_FOLLOW = 1 << 3
-F_LEFT_RESET = 1 << 4    # 左臂复位中（X 或首次开闸自动归零）
+F_LEFT_RESET = 1 << 4    # 左臂复位中（Franka Teleop 不用左臂）
 F_RIGHT_RESET = 1 << 5
 F_PAUSED = 1 << 6        # 面板打开 / 失去焦点 / 摘下头显
 F_SMOOTH = 1 << 7        # 适配器在两包之间插值
