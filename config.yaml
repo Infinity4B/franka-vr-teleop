@@ -1,0 +1,80 @@
+# franka_vr_bridge 配置。这里是机器人端的硬上限，头显设置面板改不了。
+# 未写的项用 franka_vr_bridge/core.py 的 DEFAULT_CONFIG 和 __main__.py 的 FRANKA_DEFAULTS。
+
+network:
+  bind: 0.0.0.0
+  port: 47800            # 发现、控制、状态共用一个 UDP 端口（lab 的 ufw 要放行）
+  robot_name: Franka-FR3 # 显示在头显的发现列表里
+
+timing:
+  rate: 200            # Bridge 输出频率 Hz
+  stat_rate: 30        # 回传头显的状态频率 Hz
+  soft_timeout: 0.12   # s，超过后手臂保持当前指令
+  hard_timeout: 1.0    # s，超过后停止发布（FR3 停在最后的目标）
+  stop_frames: 10
+  owner_timeout: 2.0   # s，持有控制权的头显多久没包后允许别的头显接管
+  feedback_timeout: 0.5
+
+arm:
+  max_lin_vel: 0.5     # m/s，跟随时末端指令速度上限（ARX 是 1.0）
+  max_ang_vel: 1.5     # rad/s（ARX 是 4.0）
+  reset_lin_vel: 0.15  # 复位（A 键 / 首次开闸自动归零）回零点的速度
+  reset_ang_vel: 0.5
+  gripper_speed: 25.0  # 头显夹爪值每秒最大变化
+  gripper: [0.0, 5.0]  # 0 闭合，5 张开
+  lag_warn: 0.02       # m，指令落后目标超过该值时 HUD 显示"限幅"
+  # 末端范围：相对零点（启动时末端位姿；ready 姿态下 TCP 约在基座上方 0.49 m、前方 0.31 m），
+  # x 前 / y 左 / z 上，单位 m / rad。头显按同一范围钳位。
+  # ⚠️ z 下限决定夹爪能下到多低：-0.30 约为基座上方 0.19 m，碰不到和基座同高的桌面。
+  #    要抓桌面上的东西，先确认桌面相对基座的高度，再慢慢放宽。
+  workspace:
+    right:
+      x: [-0.25, 0.30]
+      y: [-0.40, 0.40]
+      z: [-0.30, 0.30]
+      roll: [-3.1416, 3.1416]
+      pitch: [-1.57, 1.57]
+      yaw: [-3.1416, 3.1416]
+    left:              # 不用左手时也要写，协议里两只手都有
+      x: [-0.25, 0.30]
+      y: [-0.40, 0.40]
+      z: [-0.30, 0.30]
+      roll: [-3.1416, 3.1416]
+      pitch: [-1.57, 1.57]
+      yaw: [-3.1416, 3.1416]
+
+chassis:
+  max: [0.0, 0.0, 0.0]   # FR3 没有底盘
+
+lift:
+  min: 0.0
+  max: 0.0               # FR3 没有升降
+  speed: 0.0
+
+franka:
+  ip: 192.168.3.1        # 环境变量 FRANKA_IP 或 --host 优先
+  arm: right             # 用哪只手柄控制 FR3：right / left
+  loop_rate: 200         # Python 跟踪循环频率 Hz（1 kHz 实时环在 libfranka 里）
+  feedback_rate: 50      # 回报实际位姿的频率 Hz
+  stiffness:
+    translational: 600   # N/m
+    rotational: 40       # Nm/rad
+  error_clip:            # 目标与实际偏差的上限：限住弹簧力，撞到东西也只是这么大的力
+    translational: 0.05  # m
+    rotational: 0.3      # rad
+  posture:               # 冗余自由度往这个关节角拉，防止肘部慢慢漂走
+    enabled: true
+    stiffness: 2.0
+    target: [0.0, -0.7854, 0.0, -2.3562, 0.0, 1.5708, 0.7854]
+  collision:             # libfranka 示例的保守值，触发后自动清错，从当前位姿重新起步
+    torque: [20, 20, 18, 18, 16, 14, 12]
+    force: [20, 20, 20, 25, 25, 25]
+  max_recover: 3         # 一分钟内允许自动清错的次数，超过就退出
+  home_joints: [0.0, -0.7854, 0.0, -2.3562, 0.0, 1.5708, 0.7854]   # --home 用，即 ready 姿态
+  home_speed: 0.05
+  gripper:               # 头显夹爪值（握持键）→ Franka Hand 二值抓取
+    enabled: true
+    close_below: 1.5     # 夹爪值低于它就抓（握持键按下过 70%）
+    open_above: 3.5      # 高于它就张开
+    speed: 0.1           # m/s
+    force: 30.0          # N
