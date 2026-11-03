@@ -176,5 +176,5 @@ FR3 应该先回零点（就在原地），再画一个直径 6 cm、上下起�
 夹爪跟手不好时，单独测 Franka Hand（手臂不动，不要和 `start.sh` 同时跑）：
 
 ```bash
-uv run --project ../franky_ctl python tools/gripper_latency.py --csv /tmp/gripper.csv
+uv run --project ../franky_ctl python tools/gripper_latency.py
 ```
