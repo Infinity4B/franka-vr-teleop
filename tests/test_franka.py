@@ -66,6 +66,7 @@ class FakeGripper:
     def __init__(self):
         self.calls = []
         self.done = True
+        self.width = 0.08
 
     def grasp_async(self, width, speed, force, epsilon_outer):
         self.calls.append(('grasp', force))
@@ -190,18 +191,20 @@ class TestGripper(unittest.TestCase):
         g = FakeGripper()
         a, _ = make_arm('right', gripper=g)
         ctl = a.gripper
-        ctl.update(5.0)
-        self.assertEqual(g.calls, [('move', 0.08)])
+        ctl.update(5.0)                # 已经全开，不发
         ctl.update(4.9)                # 差 1.6 mm，在死区内
-        self.assertEqual(len(g.calls), 1)
+        self.assertEqual(g.calls, [])
         ctl.update(4.0)
-        self.assertEqual(g.calls[-1], ('move', 0.064))
+        self.assertEqual(g.calls, [('move', 0.064)])
+        g.width = 0.064
         g.done = False
-        ctl.update(4.0)
-        ctl.future.done = False
-        ctl.update(2.5)                # 同方向更远：等这一步走完
+        ctl.update(3.5)
+        self.assertEqual(g.calls[-1], ('move', 0.056))
+        ctl.update(2.5)                # 同方向更远：等这一步走完，不停
+        ctl.update(2.0)
         self.assertEqual(len(g.calls), 2)
         ctl.future.done = True
+        g.width = 0.056
         ctl.update(2.5)
         self.assertEqual(g.calls[-1], ('move', 0.04))
         ctl.update(4.5)                # 掉头：先停
@@ -209,16 +212,42 @@ class TestGripper(unittest.TestCase):
         ctl.update(4.5)                # 还在停，不重复发
         self.assertEqual(len(g.calls), 4)
         ctl.future.done = True
+        g.width = 0.05
         ctl.update(4.5)
         self.assertEqual(g.calls[-1], ('move', 0.072))
+
+    def test_linear_after_stop_keeps_direction(self):
+        """停下后重新出发的那一步，方向按实际开口算：继续同向时不再停。"""
+        g = FakeGripper()
+        a, _ = make_arm('right', gripper=g)
+        ctl = a.gripper
+        g.done = False
+        ctl.update(2.5)                # 0.08 → 0.04，合拢
+        ctl.update(4.5)                # 掉头 → stop
+        ctl.future.done = True
+        g.width = 0.06
+        ctl.update(4.5)                # 0.06 → 0.072，张开
+        ctl.update(5.0)                # 同向更远，等
+        self.assertEqual([c[0] for c in g.calls], ['move', 'stop', 'move'])
+
+    def test_linear_stopped_at_target(self):
+        g = FakeGripper()
+        a, _ = make_arm('right', gripper=g)
+        ctl = a.gripper
+        g.done = False
+        ctl.update(2.5)
+        ctl.update(4.0)                # stop
+        ctl.future.done = True
+        g.width = 0.0641               # 停下时正好在新目标附近
+        ctl.update(4.0)
+        self.assertEqual([c[0] for c in g.calls], ['move', 'stop'])
 
     def test_linear_grasp_and_release(self):
         g = FakeGripper()
         a, _ = make_arm('right', gripper=g)
         ctl = a.gripper
-        ctl.update(3.0)
         g.done = False
-        ctl.future.done = False
+        ctl.update(3.0)
         ctl.update(0.2)                # 按到底：先停正在走的 move，再带力抓
         self.assertEqual(g.calls[-1], ('stop',))
         ctl.future.done = True
@@ -227,8 +256,22 @@ class TestGripper(unittest.TestCase):
         ctl.update(0.8)                # 回差区内保持抓紧
         self.assertEqual(len(g.calls), 3)
         ctl.future.done = True
+        g.width = 0.01
         ctl.update(1.5)
         self.assertEqual(g.calls[-1], ('move', 0.024))
+
+    def test_set_does_not_block(self):
+        """夹爪指令卡住时，跟踪循环调 set() 也要马上返回。"""
+        g = FakeGripper()
+        release = threading.Event()
+        g.move_async = lambda width, speed: (release.wait(2.0), FakeFuture(True))[1]
+        a, _ = make_arm('right', gripper=g)
+        t0 = F.time.monotonic()
+        a.gripper.set(2.0)
+        F.time.sleep(0.05)
+        a.gripper.set(1.5)
+        self.assertLess(F.time.monotonic() - t0, 0.5)
+        release.set()
 
     def test_binary_hysteresis_and_busy(self):
         g = FakeGripper()

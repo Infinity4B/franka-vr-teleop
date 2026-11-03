@@ -172,3 +172,9 @@ uv run --project ../franky_ctl python tools/fake_vr.py --host 127.0.0.1 --scale 
 ```
 
 FR3 应该先回零点（就在原地），再画一个直径 6 cm、上下起伏 ±1.5 cm 的小圈，同时末端俯仰 ±5°，夹爪开合几次，6 s 后停住。
+
+夹爪跟手不好时，单独测 Franka Hand（手臂不动，不要和 `start.sh` 同时跑）：
+
+```bash
+uv run --project ../franky_ctl python tools/gripper_latency.py --csv /tmp/gripper.csv
+```

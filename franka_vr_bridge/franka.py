@@ -68,13 +68,18 @@ GRASP = 'grasp'
 
 
 class GripperCtl:
-    """头显夹爪值（0 合 ~ 5 开）→ Franka Hand。指令都是异步的，不阻塞手臂的跟踪循环。
+    """头显夹爪值（0 合 ~ 5 开）→ Franka Hand。
+
+    指令在单独的线程里发：franky 的 *_async 发新指令前会等上一条做完（setCurrentFuture），
+    放在跟踪循环里会把手臂一起卡住。跟踪循环只调 set()，测试直接调 update()。
 
     linear：开口按夹爪值线性跟随（move）；低于 grasp_below（握持键按到底）改用 grasp 带力抓紧，
             抓着时高于 release_above 才松开、回到跟随。Franka Hand 的指令要执行完才结束：
             目标继续往同一方向走就等这一步走完再发下一步，掉头或要抓 / 松时先 stop 再发。
     binary：只有张开 / 抓紧两态，带回差；上一条指令没完成时不发新的。
     """
+
+    PERIOD = 0.01   # s，工作线程检查新目标的间隔
 
     def __init__(self, gripper, cfg, log):
         self.gripper = gripper
@@ -92,8 +97,22 @@ class GripperCtl:
         self.log = log
         self.closed = None     # binary：是否抓着
         self.cmd = None        # linear：在执行的指令，GRASP 或目标开口（m）；stop 之后为 None
-        self.origin = None     # linear：发出 cmd 时上一条指令的开口，用来判断运动方向
+        self.dir = 0.0         # linear：cmd 的运动方向，+1 张开 / -1 合拢 / 0 未知
         self.future = None
+        self.value = None
+        self.thread = None
+
+    def set(self, value):
+        """跟踪循环调用：只记下最新的夹爪值，第一次调用时启动工作线程。"""
+        self.value = value
+        if self.thread is None:
+            self.thread = threading.Thread(target=self._loop, name='gripper', daemon=True)
+            self.thread.start()
+
+    def _loop(self):
+        while True:
+            self.update(self.value)
+            time.sleep(self.PERIOD)
 
     def update(self, value):
         try:
@@ -136,10 +155,14 @@ class GripperCtl:
             return
         if want is GRASP:
             self.future = self.gripper.grasp_async(0.0, self.speed, self.force, epsilon_outer=1.0)
-            self.origin = None
+            self.dir = -1.0
         else:
+            width = float(self.gripper.width)
+            if abs(want - width) < self.deadband:   # 已经在这个开口（比如刚停下来）
+                self.cmd = want
+                return
             self.future = self.gripper.move_async(want, self.speed)
-            self.origin = self.cmd if isinstance(self.cmd, float) else None
+            self.dir = 1.0 if want > width else -1.0
         self.cmd = want
 
     def _same(self, a, b):
@@ -151,9 +174,9 @@ class GripperCtl:
         """正在执行时来了新目标：同方向更远就等它走完，否则先停。"""
         if self.cmd is None:   # 已经在停
             return False
-        if want is GRASP or self.cmd is GRASP or self.origin is None:
+        if want is GRASP or self.cmd is GRASP:
             return True
-        return (want - self.cmd) * (self.cmd - self.origin) <= 0
+        return (want - self.cmd) * self.dir <= 0
 
 
 # ---------------------------------------------------------------------- 手臂
@@ -248,7 +271,7 @@ class FrankaArm:
                 if tgt is not None:
                     tracker.set_target(fk.Affine(tgt[0]))
                     if self.gripper is not None:
-                        self.gripper.update(tgt[1])
+                        self.gripper.set(tgt[1])
                 now = time.monotonic()
                 if now >= next_fb:
                     next_fb = now + fb_period
