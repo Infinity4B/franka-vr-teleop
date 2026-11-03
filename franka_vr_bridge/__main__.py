@@ -25,7 +25,7 @@ FRANKA_DEFAULTS = {
     'home_joints': [0.0, -0.7854, 0.0, -2.3562, 0.0, 1.5708, 0.7854],
     'home_speed': 0.05,
     'gripper': {'enabled': True, 'mode': 'binary', 'grasp_below': 0.5, 'release_above': 1.0, 'deadband': 0.005,
-                'close_below': 1.5, 'open_above': 3.5, 'speed': 0.1, 'force': 30.0},
+                'close_below': 1.5, 'open_above': 3.5, 'open_width': 0.0, 'speed': 0.1, 'force': 30.0},
 }
 
 

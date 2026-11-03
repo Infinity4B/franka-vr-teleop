@@ -94,6 +94,8 @@ class GripperCtl:
         self.speed = float(cfg['speed'])
         self.force = float(cfg['force'])
         self.max_width = float(gripper.max_width)
+        ow = float(cfg['open_width'])
+        self.open_width = self.max_width if ow <= 0.0 else min(ow, self.max_width)
         self.log = log
         self.closed = None     # binary：是否抓着
         self.cmd = None        # linear：在执行的指令，GRASP 或目标开口（m）；stop 之后为 None
@@ -138,7 +140,10 @@ class GripperCtl:
         if want:
             self.future = self.gripper.grasp_async(0.0, self.speed, self.force, epsilon_outer=1.0)
         else:
-            self.future = self.gripper.open_async(self.speed)
+            if self.open_width < self.max_width:
+                self.future = self.gripper.move_async(self.open_width, self.speed)
+            else:
+                self.future = self.gripper.open_async(self.speed)
         self.closed = want
 
     def _update_linear(self, value):

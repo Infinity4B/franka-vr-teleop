@@ -80,5 +80,6 @@ franka:
     deadband: 0.005      # linear：目标开口变化超过它（m）才发新指令
     close_below: 1.5     # binary：夹爪值低于它就抓（握持键按下过 70%）
     open_above: 3.5      # binary：高于它就张开
-    speed: 0.1           # m/s
+    open_width: 0.0      # binary：张开到多宽（m），0 = 全开（约 0.08）。张得越小，下一次闭合走得越短、越快
+    speed: 0.1           # m/s，两指合起来的开口速度。0.1 已是 Franka Hand 上限（每指 50 mm/s）
     force: 30.0          # N

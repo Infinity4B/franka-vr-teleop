@@ -85,11 +85,12 @@ class FakeGripper:
         return FakeFuture(self.done)
 
 
-def make_arm(arm='right', gripper=None, gripper_mode='linear'):
+def make_arm(arm='right', gripper=None, gripper_mode='linear', open_width=0.0):
     sys.modules['franky'] = FakeFranky('franky')
     cfg = load_config(None)
     cfg['franka']['arm'] = arm
     cfg['franka']['gripper']['mode'] = gripper_mode
+    cfg['franka']['gripper']['open_width'] = open_width
     robot = FakeRobot(READY_EE)
     a = F.FrankaArm(robot, cfg, log=lambda s: None, gripper=gripper)
     a.set_zero_here()
@@ -272,6 +273,16 @@ class TestGripper(unittest.TestCase):
         a.gripper.set(1.5)
         self.assertLess(F.time.monotonic() - t0, 0.5)
         release.set()
+
+    def test_binary_open_width(self):
+        g = FakeGripper()
+        a, _ = make_arm('right', gripper=g, gripper_mode='binary', open_width=0.04)
+        a.gripper.update(5.0)
+        self.assertEqual(g.calls, [('move', 0.04)])
+        g2 = FakeGripper()
+        a2, _ = make_arm('right', gripper=g2, gripper_mode='binary', open_width=0.2)   # 超过最大值按全开
+        a2.gripper.update(5.0)
+        self.assertEqual(g2.calls, [('open',)])
 
     def test_binary_hysteresis_and_busy(self):
         g = FakeGripper()
