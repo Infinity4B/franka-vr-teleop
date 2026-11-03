@@ -61,6 +61,8 @@ class FakeFuture:
 
 
 class FakeGripper:
+    max_width = 0.08
+
     def __init__(self):
         self.calls = []
         self.done = True
@@ -73,11 +75,20 @@ class FakeGripper:
         self.calls.append(('open',))
         return FakeFuture(self.done)
 
+    def move_async(self, width, speed):
+        self.calls.append(('move', round(width, 4)))
+        return FakeFuture(self.done)
 
-def make_arm(arm='right', gripper=None):
+    def stop_async(self):
+        self.calls.append(('stop',))
+        return FakeFuture(self.done)
+
+
+def make_arm(arm='right', gripper=None, gripper_mode='linear'):
     sys.modules['franky'] = FakeFranky('franky')
     cfg = load_config(None)
     cfg['franka']['arm'] = arm
+    cfg['franka']['gripper']['mode'] = gripper_mode
     robot = FakeRobot(READY_EE)
     a = F.FrankaArm(robot, cfg, log=lambda s: None, gripper=gripper)
     a.set_zero_here()
@@ -175,9 +186,53 @@ class TestArm(unittest.TestCase):
 
 
 class TestGripper(unittest.TestCase):
-    def test_hysteresis_and_busy(self):
+    def test_linear_follow(self):
         g = FakeGripper()
         a, _ = make_arm('right', gripper=g)
+        ctl = a.gripper
+        ctl.update(5.0)
+        self.assertEqual(g.calls, [('move', 0.08)])
+        ctl.update(4.9)                # 差 1.6 mm，在死区内
+        self.assertEqual(len(g.calls), 1)
+        ctl.update(4.0)
+        self.assertEqual(g.calls[-1], ('move', 0.064))
+        g.done = False
+        ctl.update(4.0)
+        ctl.future.done = False
+        ctl.update(2.5)                # 同方向更远：等这一步走完
+        self.assertEqual(len(g.calls), 2)
+        ctl.future.done = True
+        ctl.update(2.5)
+        self.assertEqual(g.calls[-1], ('move', 0.04))
+        ctl.update(4.5)                # 掉头：先停
+        self.assertEqual(g.calls[-1], ('stop',))
+        ctl.update(4.5)                # 还在停，不重复发
+        self.assertEqual(len(g.calls), 4)
+        ctl.future.done = True
+        ctl.update(4.5)
+        self.assertEqual(g.calls[-1], ('move', 0.072))
+
+    def test_linear_grasp_and_release(self):
+        g = FakeGripper()
+        a, _ = make_arm('right', gripper=g)
+        ctl = a.gripper
+        ctl.update(3.0)
+        g.done = False
+        ctl.future.done = False
+        ctl.update(0.2)                # 按到底：先停正在走的 move，再带力抓
+        self.assertEqual(g.calls[-1], ('stop',))
+        ctl.future.done = True
+        ctl.update(0.2)
+        self.assertEqual(g.calls[-1], ('grasp', 30.0))
+        ctl.update(0.8)                # 回差区内保持抓紧
+        self.assertEqual(len(g.calls), 3)
+        ctl.future.done = True
+        ctl.update(1.5)
+        self.assertEqual(g.calls[-1], ('move', 0.024))
+
+    def test_binary_hysteresis_and_busy(self):
+        g = FakeGripper()
+        a, _ = make_arm('right', gripper=g, gripper_mode='binary')
         ctl = a.gripper
         ctl.update(5.0)
         self.assertEqual(g.calls, [('open',)])

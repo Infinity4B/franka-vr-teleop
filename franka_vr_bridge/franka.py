@@ -63,38 +63,97 @@ class Zero:
 
 # ---------------------------------------------------------------------- 夹爪
 
+GRIPPER_OPEN_VALUE = 5.0   # 头显夹爪值：0 合，5 开
+GRASP = 'grasp'
+
+
 class GripperCtl:
-    """头显夹爪值（0 合 ~ 5 开）→ Franka Hand 二值抓取，带回差；上一条指令没完成时不发新的。"""
+    """头显夹爪值（0 合 ~ 5 开）→ Franka Hand。指令都是异步的，不阻塞手臂的跟踪循环。
+
+    linear：开口按夹爪值线性跟随（move）；低于 grasp_below（握持键按到底）改用 grasp 带力抓紧，
+            抓着时高于 release_above 才松开、回到跟随。Franka Hand 的指令要执行完才结束：
+            目标继续往同一方向走就等这一步走完再发下一步，掉头或要抓 / 松时先 stop 再发。
+    binary：只有张开 / 抓紧两态，带回差；上一条指令没完成时不发新的。
+    """
 
     def __init__(self, gripper, cfg, log):
         self.gripper = gripper
+        self.mode = cfg['mode']
+        if self.mode not in ('linear', 'binary'):
+            raise ValueError(f'franka.gripper.mode 只能是 linear / binary，收到 {self.mode!r}')
         self.close_below = float(cfg['close_below'])
         self.open_above = float(cfg['open_above'])
+        self.grasp_below = float(cfg['grasp_below'])
+        self.release_above = float(cfg['release_above'])
+        self.deadband = float(cfg['deadband'])
         self.speed = float(cfg['speed'])
         self.force = float(cfg['force'])
+        self.max_width = float(gripper.max_width)
         self.log = log
-        self.closed = None
+        self.closed = None     # binary：是否抓着
+        self.cmd = None        # linear：在执行的指令，GRASP 或目标开口（m）；stop 之后为 None
+        self.origin = None     # linear：发出 cmd 时上一条指令的开口，用来判断运动方向
         self.future = None
 
     def update(self, value):
+        try:
+            if self.mode == 'linear':
+                self._update_linear(value)
+            else:
+                self._update_binary(value)
+        except Exception as e:  # noqa: BLE001 夹爪断线不影响手臂
+            self.log(f'夹爪指令失败：{e}')
+
+    def _busy(self):
+        return self.future is not None and not self.future.wait(0)
+
+    def _update_binary(self, value):
         if value < self.close_below:
             want = True
         elif value > self.open_above:
             want = False
         else:
             return
-        if want == self.closed:
+        if want == self.closed or self._busy():
             return
-        if self.future is not None and not self.future.wait(0):
+        if want:
+            self.future = self.gripper.grasp_async(0.0, self.speed, self.force, epsilon_outer=1.0)
+        else:
+            self.future = self.gripper.open_async(self.speed)
+        self.closed = want
+
+    def _update_linear(self, value):
+        if value < self.grasp_below or (self.cmd is GRASP and value <= self.release_above):
+            want = GRASP
+        else:
+            want = self.max_width * min(max(value / GRIPPER_OPEN_VALUE, 0.0), 1.0)
+        if self._same(want, self.cmd):
             return
-        try:
-            if want:
-                self.future = self.gripper.grasp_async(0.0, self.speed, self.force, epsilon_outer=1.0)
-            else:
-                self.future = self.gripper.open_async(self.speed)
-            self.closed = want
-        except Exception as e:  # noqa: BLE001 夹爪断线不影响手臂
-            self.log(f'夹爪指令失败：{e}')
+        if self._busy():
+            if self._must_stop(want):
+                self.future = self.gripper.stop_async()
+                self.cmd = None
+            return
+        if want is GRASP:
+            self.future = self.gripper.grasp_async(0.0, self.speed, self.force, epsilon_outer=1.0)
+            self.origin = None
+        else:
+            self.future = self.gripper.move_async(want, self.speed)
+            self.origin = self.cmd if isinstance(self.cmd, float) else None
+        self.cmd = want
+
+    def _same(self, a, b):
+        if a is None or b is None or a is GRASP or b is GRASP:
+            return a is b
+        return abs(a - b) < self.deadband
+
+    def _must_stop(self, want):
+        """正在执行时来了新目标：同方向更远就等它走完，否则先停。"""
+        if self.cmd is None:   # 已经在停
+            return False
+        if want is GRASP or self.cmd is GRASP or self.origin is None:
+            return True
+        return (want - self.cmd) * (self.cmd - self.origin) <= 0
 
 
 # ---------------------------------------------------------------------- 手臂

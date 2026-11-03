@@ -72,9 +72,13 @@ franka:
   max_recover: 3         # 一分钟内允许自动清错的次数，超过就退出
   home_joints: [0.0, -0.7854, 0.0, -2.3562, 0.0, 1.5708, 0.7854]   # --home 用，即 ready 姿态
   home_speed: 0.05
-  gripper:               # 头显夹爪值（握持键）→ Franka Hand 二值抓取
+  gripper:               # 头显夹爪值（握持键，0 合 ~ 5 开）→ Franka Hand
     enabled: true
-    close_below: 1.5     # 夹爪值低于它就抓（握持键按下过 70%）
-    open_above: 3.5      # 高于它就张开
+    mode: linear         # linear：开口跟握持键线性走，按到底才带力抓；binary：只有张开 / 抓紧两态
+    grasp_below: 0.5     # linear：夹爪值低于它就用 grasp 带力抓（握持键按下过 90%）
+    release_above: 1.0   # linear：抓着时高于它才松开、回到跟随（握持键松到 80% 以下）
+    deadband: 0.005      # linear：目标开口变化超过它（m）才发新指令
+    close_below: 1.5     # binary：夹爪值低于它就抓（握持键按下过 70%）
+    open_above: 3.5      # binary：高于它就张开
     speed: 0.1           # m/s
     force: 30.0          # N
