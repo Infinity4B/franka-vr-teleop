@@ -23,6 +23,7 @@ func _init() -> void:
 	test_teleop_workspace()
 	test_teleop_toggle()
 	test_teleop_follow_gripper_reset()
+	test_teleop_gripper_toggle()
 	test_teleop_pause_requires_release()
 	test_protocol_xcheck()
 	print("\n%d 项检查，%d 项失败" % [checks, failures])
@@ -199,8 +200,10 @@ func hand(overrides := {}) -> Dictionary:
 	return h
 
 
-func make_teleop():
-	return Teleop.new(Settings.new())
+func make_teleop(grip_toggle := false):
+	var st := Settings.new()
+	st.set_value("control", "gripper_toggle", grip_toggle)
+	return Teleop.new(st)
 
 
 func test_teleop_workspace() -> void:
@@ -284,6 +287,40 @@ func test_teleop_follow_gripper_reset() -> void:
 	t.enabled = false
 	c = t.step(hand({"grip": 1.0, "ax": true}), 1.1)
 	near(c.right[6], 5.0, 1e-5, "遥操关闭时夹爪不动")
+
+
+func test_teleop_gripper_toggle() -> void:
+	print("状态机：握持键按一下合、再按一下开")
+	var t = make_teleop(true)
+	t.enabled = true
+	t.ever_enabled = true
+	var c: Dictionary = t.step(hand(), 0.0)
+	near(c.right[6], 5.0, 1e-6, "初始张开")
+	c = t.step(hand({"grip": 0.5}), 0.1)
+	near(c.right[6], 5.0, 1e-6, "按到一半不算")
+	c = t.step(hand({"grip": 0.9}), 0.2)
+	near(c.right[6], 0.0, 1e-6, "按下 → 闭合")
+	c = t.step(hand({"grip": 0.4}), 0.3)
+	c = t.step(hand({"grip": 0.9}), 0.4)
+	near(c.right[6], 0.0, 1e-6, "没松到 0.3 以下再按不算，保持闭合")
+	c = t.step(hand({"grip": 0.0}), 0.5)
+	near(c.right[6], 0.0, 1e-6, "松开后保持闭合")
+	c = t.step(hand({"grip": 1.0}), 0.6)
+	near(c.right[6], 5.0, 1e-6, "再按一下 → 张开")
+	t.step(hand(), 0.7)
+	t.paused = true
+	c = t.step(hand({"grip": 1.0}), 0.8)
+	near(c.right[6], 5.0, 1e-6, "暂停时按下不切换")
+	t.paused = false
+	c = t.step(hand({"grip": 1.0}), 0.9)
+	near(c.right[6], 5.0, 1e-6, "恢复时还按着不算新的一下")
+	t.step(hand(), 1.0)
+	c = t.step(hand({"grip": 1.0}), 1.1)
+	near(c.right[6], 0.0, 1e-6, "松开再按 → 闭合")
+	t.enabled = false
+	t.step(hand(), 1.2)
+	c = t.step(hand({"grip": 1.0}), 1.3)
+	near(c.right[6], 0.0, 1e-6, "遥操关闭时按下不切换")
 
 
 func test_teleop_pause_requires_release() -> void:

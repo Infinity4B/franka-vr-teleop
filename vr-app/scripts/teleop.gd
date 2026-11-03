@@ -2,7 +2,7 @@
 ##
 ##   长按 B 1 s：遥操开 / 关（每次切换都要重新按）；第一次开启时自动回零点
 ##   食指扳机：按住跟随，松开冻结（离合）；开启遥操、暂停恢复后要先松开再按
-##   握持键：夹爪（不按 = 张开，按到底 = 闭合）
+##   握持键：夹爪。默认按一下闭合、再按一下张开（gripper_toggle）；关掉后按跟握持深度连续变化
 ##   A：回零点
 ## 暂停（面板打开、失去焦点、未对齐）：手臂、夹爪冻结。
 ## 协议沿用 ARX 的双臂格式：CTRL 的左臂恒为零点、夹爪张开，底盘 / 升降恒为 0。
@@ -17,6 +17,8 @@ const TRIGGER_ON := 0.6
 const TRIGGER_OFF := 0.4
 const RESET_HOLD := 0.3   # 复位标志至少保持这么久，防止丢包
 const TOGGLE_HOLD := 1.0  # 长按 B 多久切换遥操开关
+const GRIP_ON := 0.7      # 握持键按过它算一次按下，松到 GRIP_OFF 以下才算松开
+const GRIP_OFF := 0.3
 const IDLE_LEFT := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0]
 
 signal enabled_changed(on: bool)
@@ -35,6 +37,8 @@ var _b_fired := false
 var _trigger_on := false
 var _need_release := true
 var _reset_until := -1.0
+var _grip_down := false
+var _grip_closed := false
 
 
 func _init(p_settings) -> void:
@@ -111,6 +115,10 @@ func step(h: Dictionary, now: float) -> Dictionary:
 		_need_release = false
 	if paused:
 		_need_release = true
+	# 握持键边沿一直跟踪：暂停、关闭遥操期间按下又松开不算，恢复时还按着也不算新的一下
+	var grip_was_down := _grip_down
+	_grip_down = h.grip > GRIP_OFF if _grip_down else h.grip > GRIP_ON
+	var grip_pressed := _grip_down and not grip_was_down
 
 	var state: int = ArmState.STAY
 	var follow := false
@@ -122,7 +130,12 @@ func step(h: Dictionary, now: float) -> Dictionary:
 		elif trig and h.tracked and not _need_release:
 			follow = true
 			state = ArmState.OPERATE
-		gripper = _gripper_value(h.grip)
+		if settings.get_value("control", "gripper_toggle"):
+			if grip_pressed:
+				_grip_closed = not _grip_closed
+			gripper = _gripper_value(1.0 if _grip_closed else 0.0)
+		else:
+			gripper = _gripper_value(h.grip)
 	solver.update(h.pose, h.tracked, follow, settings.get_value("control", "pos_scale"),
 			settings.get_value("control", "rot_enabled"), settings.get_value("control", "rot_scale"))
 	if state != arm_state:

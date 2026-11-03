@@ -147,6 +147,7 @@ func _page_control() -> Control:
 	page.add_child(_slider("夹爪张开值", "control", "gripper_open", 0.0, 5.0, 0.1))
 	page.add_child(_slider("夹爪闭合值", "control", "gripper_close", 0.0, 5.0, 0.1))
 	page.add_child(_check("夹爪反向", "control", "gripper_invert"))
+	page.add_child(_check("夹爪：按一下合、再按一下开", "control", "gripper_toggle"))
 	return _scroll(page)
 
 

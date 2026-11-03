@@ -18,6 +18,7 @@ const DEFAULTS := {
 		"gripper_open": 5.0,  # 不按握持键时的夹爪值（适配器：高于 3.5 张开）
 		"gripper_close": 0.0, # 握持键按到底时的夹爪值（适配器：低于 1.5 抓取）
 		"gripper_invert": false,
+		"gripper_toggle": true, # 按一下握持键闭合、再按一下张开；false = 跟握持深度连续变化
 	},
 	"display": {
 		"hud": true,
