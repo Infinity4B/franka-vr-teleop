@@ -3,7 +3,7 @@
 
 network:
   bind: 0.0.0.0
-  port: 47800            # 发现、控制、状态共用一个 UDP 端口（lab 的 ufw 要放行）
+  port: 47800            # 发现、控制、状态共用一个 UDP 端口（改了要同步改 host/host.env 的 VR_PORT，重跑防火墙脚本）
   robot_name: Franka-FR3 # 显示在头显的发现列表里
 
 timing:
@@ -74,7 +74,7 @@ franka:
   home_speed: 0.05
   gripper:               # 头显夹爪值（握持键，0 合 ~ 5 开）→ Franka Hand
     enabled: true
-    mode: binary         # binary：只有张开 / 抓紧两态；linear：开口跟握持键走（实测跟不上，见 README）
+    mode: binary         # binary：只有张开 / 抓紧两态；linear：开口跟握持键走（实测跟不上，见 docs/usage.md）
     grasp_below: 0.5     # linear：夹爪值低于它就用 grasp 带力抓（握持键按下过 90%）
     release_above: 1.0   # linear：抓着时高于它才松开、回到跟随（握持键松到 80% 以下）
     deadband: 0.005      # linear：目标开口变化超过它（m）才发新指令

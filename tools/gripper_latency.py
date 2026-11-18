@@ -1,7 +1,7 @@
 # -- coding: UTF-8
 """只动 Franka Hand（手臂不动）：测夹爪每条指令的固定开销，判断能不能做连续跟随。
 
-    uv run --project ../franky_ctl python tools/gripper_latency.py [--host 192.168.3.1] [--yes]
+    uv run python tools/gripper_latency.py [--host 192.168.3.1] [--yes]
 
 夹爪会开合十几次，手和东西远离指尖。不需要 FCI 激活，也不要和 start.sh 同时跑。
 所有读开口都在主线程里做：夹爪状态约 10 Hz 才来一包，两个线程同时读会互相抢包、一等就是一两秒。

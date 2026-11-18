@@ -1,0 +1,23 @@
+[project]
+name = "franka-vr-teleop"
+version = "0.2.0"
+description = "Quest 3S 无线遥操 Franka FR3：主机端适配器 franka_vr_bridge"
+requires-python = "==3.11.*"
+dependencies = [
+    # franky 只在 Linux x86_64 上用（连真机）；Mac 上也能 uv run 跑离线测试和 dry-run
+    "franky-control==2.0.0+libfranka.0.17.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "numpy",
+    "pyyaml",
+]
+
+[tool.uv]
+package = false
+
+# franky 的 wheel 里自带 libfranka，必须和机器人的 Robot Server 版本一致：
+#   server 9  = 机器人系统 5.7.2–5.8.x → libfranka 0.17.0 的 wheel（本仓库自带，两台 FR3 都是 5.7.2）
+#   server 10 = 机器人系统 >= 5.9.0    → libfranka 0.21.x 的 wheel，换法见 docs/install.md
+# wheel 来自官方索引 https://timschneider42.github.io/franky/whl/by-robot-server-version/9/franky-control/
+# （sha256 822260390c8a1d81f63fb24eda88fc780ca9c32a94aa68a4de0d60aad93582e3，已核对）。
+# 放进仓库是因为 lab 直连 GitHub Release 基本下不动。franky 2.0.0 起是 MIT 许可。
+[tool.uv.sources]
+franky-control = { path = "wheels/franky_control-2.0.0+libfranka.0.17.0-cp311-cp311-manylinux_2_34_x86_64.whl" }
