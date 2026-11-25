@@ -58,7 +58,7 @@ bash host/check_host.sh                  # 只读自检
 | `pyproject.toml` `uv.lock` `wheels/` | Python 3.11 环境：franky-control 2.0.0（自带 libfranka 0.17.0，对应机器人系统 5.7.2–5.8.x）、numpy、PyYAML |
 | `vr-app/` | 头显应用的 Godot 工程，`vr-app/tests/` 是它的离线测试 |
 | `tests/` | 适配器离线测试（不需要 franky 和机器人） |
-| `tools/` | 头显：`install_apk.sh` 安装、`build_apk.sh` 构建、`quest_awake.sh` 关佩戴检测；测试：`fake_vr.py` 模拟头显、`run_vr_tests.sh` 全部离线测试、`gripper_latency.py` 测夹爪延迟 |
+| `tools/` | 头显：`install_apk.sh` 安装、`build_apk.sh` 构建、`quest_awake.sh` 关佩戴检测；测试：`fake_vr.py` 模拟头显、`run_vr_tests.sh` 全部离线测试、`gripper_latency.py` 测夹爪延迟；`analyze_workspace.py` 分析 `--record` 录的工作空间 |
 | `.github/workflows/build-apk.yml` | GitHub Actions：离线测试 + 构建 APK |
 
 ## 版本要求

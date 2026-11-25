@@ -201,6 +201,7 @@ class FrankaArm:
         self.target = None   # (4×4 末端位姿, 头显夹爪值)
         self.zero = None
         self.gripper = GripperCtl(gripper, self.cfg['gripper'], log) if gripper is not None else None
+        self.recorder = None   # --record 时由 __main__ 设置（recorder.Recorder）
 
     def ee_matrix(self):
         return np.asarray(self.robot.current_pose.end_effector_pose.matrix)
@@ -230,7 +231,10 @@ class FrankaArm:
             try:
                 self._track(runner, stop)
             except self.franky.ControlException as e:
-                self.log(f'控制异常：{str(e).splitlines()[0][:160]}')
+                msg = str(e).splitlines()[0][:160]
+                self.log(f'控制异常：{msg}')
+                if self.recorder is not None:
+                    self.recorder.event(f'控制异常：{msg}')
             if stop.is_set():
                 return
             now = time.monotonic()
@@ -278,7 +282,17 @@ class FrankaArm:
                     if self.gripper is not None:
                         self.gripper.set(tgt[1])
                 now = time.monotonic()
+                if self.recorder is not None and self.recorder.due(now):
+                    self._record(runner, now)
                 if now >= next_fb:
                     next_fb = now + fb_period
                     runner.on_arm_feedback(self.arm, self.zero.from_base(self.ee_matrix()))
                     runner.on_arm_feedback(self.other, [0.0] * 6)
+
+    def _record(self, runner, now):
+        try:
+            st = self.robot.state
+            q, force = st.q, st.O_F_ext_hat_K
+        except Exception:  # noqa: BLE001 读不到状态也照样记位姿
+            q = force = None
+        self.recorder.sample(now, runner, ee=self.ee_matrix(), q=q, force=force, zero=self.zero)

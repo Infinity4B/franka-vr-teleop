@@ -1,5 +1,6 @@
 # -- coding: UTF-8
-"""python -m franka_vr_bridge [--config config.yaml] [--home] [--dry-run] [--csv out.csv] [--host IP] [--port N]
+"""python -m franka_vr_bridge [--config config.yaml] [--home] [--dry-run] [--csv out.csv] [--record [out.csv]]
+                            [--ws AXIS=LO,HI ...] [--host IP] [--port N]
 
 Quest 3S 无线遥操 Franka FR3 的适配器。头显用本仓库 vr-app/ 的 Franka Teleop（协议同 arx-vr-analysis，magic 为 FRVR）。
 """
@@ -40,6 +41,25 @@ def load_config(path):
     return cfg
 
 
+def parse_ws(items):
+    """--ws x=-0.25,0.45 → {'x': [-0.25, 0.45]}。轴：x y z roll pitch yaw。"""
+    from .recorder import AXES
+    out = {}
+    for it in items or []:
+        try:
+            k, v = it.split('=', 1)
+            lo, hi = (float(x) for x in v.split(','))
+        except ValueError:
+            raise SystemExit(f'--ws 写法是 轴=下限,上限，比如 z=-0.30,0.45，收到 {it!r}')
+        k = k.strip()
+        if k not in AXES:
+            raise SystemExit(f'--ws 的轴只能是 {" ".join(AXES)}，收到 {k!r}')
+        if not lo < hi:
+            raise SystemExit(f'--ws {k}：下限要小于上限')
+        out[k] = [lo, hi]
+    return out
+
+
 def main(argv=None):
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser(prog='franka_vr_bridge', description='Quest 3S 无线遥操 Franka FR3')
@@ -50,6 +70,11 @@ def main(argv=None):
     ap.add_argument('--yes', action='store_true', help='--home 时不再确认')
     ap.add_argument('--dry-run', action='store_true', help='不连机器人，只打印将要执行的指令（测头显和网络）')
     ap.add_argument('--csv', help='把每次发布的指令写入 CSV（延迟分析）')
+    ap.add_argument('--record', nargs='?', const='auto', metavar='OUT.csv',
+                    help='工作空间录制：记录目标、指令、实际位姿、关节角（默认 recordings/ws_时间.csv），'
+                         '用 tools/analyze_workspace.py 分析')
+    ap.add_argument('--ws', action='append', metavar='AXIS=LO,HI',
+                    help='本次临时改末端范围（相对零点，两只手都改），可重复，比如 --ws z=-0.30,0.45 --ws y=-0.55,0.55')
     args = ap.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -58,6 +83,16 @@ def main(argv=None):
     ip = args.host or os.environ.get('FRANKA_IP') or cfg['franka']['ip']
     log = lambda s: print(s, flush=True)
     log(f'franka_vr_bridge（core {core_version}）  配置：{args.config if os.path.exists(args.config) else "内置默认值"}')
+    ws = parse_ws(args.ws)
+    if ws:
+        for arm in ('left', 'right'):
+            cfg['arm']['workspace'][arm] = dict(cfg['arm']['workspace'][arm], **ws)
+        log('本次末端范围（--ws 覆盖）：' + '  '.join(f'{k} {lo:+.2f}~{hi:+.2f}' for k, (lo, hi) in ws.items()))
+    record_path = None
+    if args.record:
+        from .recorder import default_path
+        record_path = default_path(here) if args.record == 'auto' else args.record
+    meta = {'home': bool(args.home), 'dry_run': bool(args.dry_run), 'ws_override': ws, 'config': args.config}
 
     stop = threading.Event()
 
@@ -69,11 +104,18 @@ def main(argv=None):
     if args.dry_run:
         watch_signals()
         runner = Runner(cfg, DryRunPrinter(log=log), ros_version=0, log=log, csv_path=args.csv)
+        rec = None
+        if record_path:
+            from .recorder import Recorder
+            rec = Recorder(record_path, cfg, cfg['franka']['arm'], log=log, extra_meta=meta)
+            rec.run_thread(runner, stop)
         runner.start()
         log('dry-run：不连机器人，Ctrl+C 退出')
         while not stop.is_set():
             stop.wait(0.2)
         runner.stop()
+        if rec:
+            rec.close()
         return
 
     import franky
@@ -112,6 +154,11 @@ def main(argv=None):
     watch_signals()   # 归位确认之后再接管 Ctrl+C，否则 input() 时按 Ctrl+C 退不出去
     arm = FrankaArm(robot, cfg, log=log, gripper=gripper)
     arm.set_zero_here()
+    if record_path:
+        from .franka import FR3_LOWER, FR3_UPPER
+        from .recorder import Recorder
+        arm.recorder = Recorder(record_path, cfg, arm.arm, zero=arm.zero, log=log, extra_meta=meta)
+        arm.recorder.set_joint_limits(FR3_LOWER, FR3_UPPER)
     runner = Runner(cfg, arm.publish, ros_version=2, log=log, csv_path=args.csv)
     runner.start()
     log('头显（Franka Teleop，右手柄）：长按 B 1 秒开/关遥操，按住扳机跟随，握持键夹爪，A 回零点。Ctrl+C 退出')
@@ -120,6 +167,8 @@ def main(argv=None):
     finally:
         stop.set()
         runner.stop()
+        if arm.recorder is not None:
+            arm.recorder.close()
         log('已退出。FR3 停在当前位置')
 
 

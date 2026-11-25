@@ -12,3 +12,4 @@ build/
 
 # 发布签名（含密码）。丢了就不能覆盖安装升级，请另外备份；GitHub Actions 用 secrets，见 workflow 文件头
 keystore/
+recordings/
