@@ -1,6 +1,6 @@
 [project]
 name = "franka-vr-teleop"
-version = "0.2.0"
+version = "0.3.0"
 description = "Quest 3S 无线遥操 Franka FR3：主机端适配器 franka_vr_bridge"
 requires-python = "==3.11.*"
 dependencies = [
