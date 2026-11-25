@@ -42,6 +42,7 @@ func _process(_delta: float) -> bool:
 		check(main.link.state == 1, "连上 dry-run 适配器（状态 OK）")
 		check(main.link.robots.has("127.0.0.1"), "发现列表里有适配器")
 		check(main.link.robots.get("127.0.0.1", {}).get("robot_name", "") == "Franka-FR3", "适配器名 Franka-FR3")
+		# run_vr_tests.sh 用 --ws x=-0.25,0.30 启动适配器
 		check(main.teleop.solver.box_hi.x > 0.29 and main.teleop.solver.box_hi.x < 0.31, "从 HELLO 取到右臂工作空间")
 		check(main.hud._lines[0].text.begins_with("遥操关"), "HUD 第 1 行：" + main.hud._lines[0].text)
 		check(main.hud._lines[2].text.begins_with("链路：正常"), "HUD 链路行：" + main.hud._lines[2].text)

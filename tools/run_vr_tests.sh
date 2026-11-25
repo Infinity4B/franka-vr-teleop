@@ -22,7 +22,8 @@ echo "$out" | grep -q "项检查，0 项失败" || fail=1
 
 echo "== 冒烟测试（主场景 + dry-run 适配器）"
 PORT=47913
-(cd "$ROOT" && exec "$PY" -B -m franka_vr_bridge --dry-run --port $PORT >/dev/null 2>&1) &
+# x 范围用 --ws 固定（smoke_main.gd 检查头显从 HELLO 收到 0.30），不随 config.yaml 调参变
+(cd "$ROOT" && exec "$PY" -B -m franka_vr_bridge --dry-run --port $PORT --ws x=-0.25,0.30 >/dev/null 2>&1) &
 BRIDGE=$!
 sleep 2
 out=$("$GODOT" --headless --xr-mode off --path "$ROOT/vr-app" -s res://tests/smoke_main.gd -- --port=$PORT 2>&1) || true
